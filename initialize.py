@@ -78,7 +78,14 @@ def initialize():
     # ログ出力の設定
     initialize_logger()
     # RAGのRetrieverを作成
-    initialize_retriever()
+    try:
+        initialize_retriever()
+        st.session_state.retriever_init_error = None
+    except Exception as e:
+        logger = logging.getLogger(ct.LOGGER_NAME)
+        logger.error(f"Retriever初期化に失敗したため、起動は継続します。\n{e}")
+        st.session_state.retriever = None
+        st.session_state.retriever_init_error = str(e)
 
 
 def initialize_logger():
@@ -207,10 +214,14 @@ def load_data_sources():
     # 読み込み対象のWebページ一覧に対して処理
     for web_url in ct.WEB_URL_LOAD_TARGETS:
         # 指定のWebページを読み込み
-        loader = WebBaseLoader(web_url)
-        web_docs = loader.load()
-        # for文の外のリストに読み込んだデータソースを追加
-        web_docs_all.extend(web_docs)
+        try:
+            loader = WebBaseLoader(web_url)
+            web_docs = loader.load()
+            # for文の外のリストに読み込んだデータソースを追加
+            web_docs_all.extend(web_docs)
+        except Exception:
+            # 外部サイトの一時的な接続不良時は、ローカルデータのみで継続する
+            continue
     # 通常読み込みのデータソースにWebページのデータを追加
     docs_all.extend(web_docs_all)
 
