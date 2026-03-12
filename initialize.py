@@ -8,6 +8,7 @@
 import os
 import csv
 import logging
+from pathlib import Path
 from logging.handlers import TimedRotatingFileHandler
 from uuid import uuid4
 import sys
@@ -35,6 +36,16 @@ def get_secret_value(key):
     Streamlit secrets から値を安全に取得
     secrets.toml が未配置でも例外を出さず None を返す
     """
+    # ローカル実行時に secrets.toml が無い場合、st.secrets 参照自体を行わない
+    secret_file_candidates = [
+        Path.home() / ".streamlit" / "secrets.toml",
+        Path(ct.BASE_DIR) / ".streamlit" / "secrets.toml",
+    ]
+    is_cloud_runtime = bool(os.getenv("STREAMLIT_SHARING_MODE"))
+
+    if not is_cloud_runtime and not any(path.exists() for path in secret_file_candidates):
+        return None
+
     try:
         return st.secrets.get(key)
     except Exception:
