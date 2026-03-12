@@ -210,4 +210,6 @@ __marimo__/
 data/*
 !data/sample/
 !data/sample/**
+!data/社員について/
+!data/社員について/社員名簿.csv
 logs/
