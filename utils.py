@@ -5,11 +5,13 @@
 ############################################################
 # ライブラリの読み込み
 ############################################################
+import csv
 import os
 from dotenv import load_dotenv
 import streamlit as st
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import HumanMessage
+from langchain_core.documents import Document as LCDocument
 from langchain_openai import ChatOpenAI
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -86,6 +88,12 @@ def get_llm_response(chat_message):
     Returns:
         LLMからの回答
     """
+    # 「人事部の従業員一覧」系は、CSVを直接参照するフォールバックで安定化
+    fallback_response = get_hr_employee_list_response(chat_message)
+    if fallback_response:
+        st.session_state.chat_history.extend([HumanMessage(content=chat_message), fallback_response["answer"]])
+        return fallback_response
+
     # LLMのオブジェクトを用意
     llm = ChatOpenAI(model_name=ct.MODEL, temperature=ct.TEMPERATURE)
 
@@ -131,3 +139,61 @@ def get_llm_response(chat_message):
     st.session_state.chat_history.extend([HumanMessage(content=chat_message), llm_response["answer"]])
 
     return llm_response
+
+
+def get_hr_employee_list_response(chat_message):
+    """
+    人事部の従業員一覧質問に対するCSV直読フォールバック
+
+    Args:
+        chat_message: ユーザー入力値
+
+    Returns:
+        フォールバック回答（該当しない場合はNone）
+    """
+    if st.session_state.mode != ct.ANSWER_MODE_2:
+        return None
+
+    normalized = chat_message.replace(" ", "")
+    if "人事" not in normalized or ("従業員" not in normalized and "社員" not in normalized):
+        return None
+
+    csv_path = os.path.join(ct.RAG_TOP_FOLDER_PATH, "社員について", "社員名簿.csv")
+    if not os.path.exists(csv_path):
+        return None
+
+    # UTF-8 / CP932 の両方に対応
+    rows = None
+    for enc in ["utf-8", "cp932"]:
+        try:
+            with open(csv_path, "r", encoding=enc, newline="") as f:
+                rows = list(csv.DictReader(f))
+            break
+        except Exception:
+            continue
+
+    if rows is None:
+        return None
+
+    hr_rows = [row for row in rows if "人事" in (row.get("部署", "") + row.get("所属", ""))]
+    if not hr_rows:
+        return None
+
+    display_columns = ["社員ID", "氏名（フルネーム）", "部署", "役職", "メールアドレス"]
+    markdown_lines = [
+        "### 人事部に所属している従業員情報",
+        "",
+        "| " + " | ".join(display_columns) + " |",
+        "|" + "|".join(["---"] * len(display_columns)) + "|",
+    ]
+
+    for row in hr_rows:
+        markdown_lines.append("| " + " | ".join([str(row.get(col, "")).strip() for col in display_columns]) + " |")
+
+    markdown_lines.append("")
+    markdown_lines.append(f"現在、人事部に所属している従業員は {len(hr_rows)} 名です。")
+
+    return {
+        "answer": "\n".join(markdown_lines),
+        "context": [LCDocument(page_content="社員名簿CSV（人事部抽出）", metadata={"source": csv_path})],
+    }
