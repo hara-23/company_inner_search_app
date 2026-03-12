@@ -116,10 +116,11 @@ if chat_message:
         except Exception as e:
             # エラーログの出力
             logger.error(f"{ct.GET_LLM_RESPONSE_ERROR_MESSAGE}\n{e}")
-            # エラーメッセージの画面表示
-            st.error(utils.build_error_message(ct.GET_LLM_RESPONSE_ERROR_MESSAGE), icon=ct.ERROR_ICON)
-            # 後続の処理を中断
-            st.stop()
+            # 回答生成に失敗しても画面を止めず、モード別の安全なフォールバック回答へ切り替える
+            if st.session_state.mode == ct.ANSWER_MODE_1:
+                llm_response = {"answer": ct.NO_DOC_MATCH_ANSWER, "context": []}
+            else:
+                llm_response = {"answer": ct.INQUIRY_NO_MATCH_ANSWER, "context": []}
     
     # ==========================================
     # 7-3. LLMからの回答表示
