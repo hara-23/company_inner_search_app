@@ -293,22 +293,36 @@ def load_csv_as_single_document(path):
         headers = reader.fieldnames or []
 
         employee_rows = []
+        by_department = {}
+
         for i, row in enumerate(reader, start=1):
             columns = [f"{header}:{row.get(header, '').strip()}" for header in headers]
 
-            # 部署情報は検索時のキーワードになりやすいため、明示的に含める
             dept_candidates = [
                 row.get(header, "").strip() for header in headers
                 if "部署" in header or "所属" in header
             ]
-            if dept_candidates:
-                columns.append(f"所属部署:{' / '.join([d for d in dept_candidates if d])}")
+            departments = [d for d in dept_candidates if d]
+            if departments:
+                columns.append(f"所属部署:{' / '.join(departments)}")
 
-            employee_rows.append(f"従業員{i}: " + " / ".join(columns))
+            employee_line = f"従業員{i}: " + " / ".join(columns)
+            employee_rows.append(employee_line)
+
+            for dept in departments:
+                by_department.setdefault(dept, []).append(employee_line)
+
+    department_sections = []
+    for dept, rows in by_department.items():
+        department_sections.append(f"{dept} に所属する従業員数: {len(rows)}")
+        department_sections.extend(rows)
 
     content = "\n".join([
         "これは社員名簿データです。従業員情報を一覧化する質問には、該当する全員を列挙してください。",
         f"レコード件数: {len(employee_rows)}",
+        "部署別一覧:",
+        *department_sections,
+        "全従業員一覧:",
         *employee_rows,
     ])
 
