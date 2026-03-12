@@ -6,6 +6,7 @@
 # ライブラリの読み込み
 ############################################################
 import os
+import csv
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from uuid import uuid4
@@ -16,6 +17,7 @@ import streamlit as st
 from docx import Document
 from langchain_community.document_loaders import WebBaseLoader
 from langchain.text_splitter import CharacterTextSplitter
+from langchain_core.documents import Document as LCDocument
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 import constants as ct
@@ -151,7 +153,13 @@ def initialize_retriever():
     )
 
     # チャンク分割を実施
-    splitted_docs = text_splitter.split_documents(docs_all)
+    # CSVは一覧性を維持するため、1ファイル=1ドキュメントのまま保持する
+    splitted_docs = []
+    for doc in docs_all:
+        if doc.metadata.get("csv_merged"):
+            splitted_docs.append(doc)
+            continue
+        splitted_docs.extend(text_splitter.split_documents([doc]))
 
     # ベクターストアの作成
     db = Chroma.from_documents(splitted_docs, embedding=embeddings)
@@ -234,12 +242,60 @@ def file_load(path, docs_all):
     # ファイル名（拡張子を含む）を取得
     file_name = os.path.basename(path)
 
+    # CSVは行単位で分割せず、1ファイルを1ドキュメントとして読み込む
+    if file_extension == ".csv":
+        docs = load_csv_as_single_document(path)
+        docs_all.extend(docs)
+        return
+
     # 想定していたファイル形式の場合のみ読み込む
     if file_extension in ct.SUPPORTED_EXTENSIONS:
         # ファイルの拡張子に合ったdata loaderを使ってデータ読み込み
         loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
         docs = loader.load()
         docs_all.extend(docs)
+
+
+def load_csv_as_single_document(path):
+    """
+    CSVを1ファイル=1ドキュメントとして読み込む
+
+    Args:
+        path: CSVファイルパス
+
+    Returns:
+        読み込んだドキュメントのリスト
+    """
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        headers = reader.fieldnames or []
+
+        employee_rows = []
+        for i, row in enumerate(reader, start=1):
+            columns = [f"{header}:{row.get(header, '').strip()}" for header in headers]
+
+            # 部署情報は検索時のキーワードになりやすいため、明示的に含める
+            dept_candidates = [
+                row.get(header, "").strip() for header in headers
+                if "部署" in header or "所属" in header
+            ]
+            if dept_candidates:
+                columns.append(f"所属部署:{' / '.join([d for d in dept_candidates if d])}")
+
+            employee_rows.append(f"従業員{i}: " + " / ".join(columns))
+
+    content = "\n".join([
+        "これは社員名簿データです。従業員情報を一覧化する質問には、該当する全員を列挙してください。",
+        f"レコード件数: {len(employee_rows)}",
+        *employee_rows,
+    ])
+
+    return [
+        LCDocument(
+            page_content=content,
+            metadata={"source": path, "csv_merged": True, "record_count": len(employee_rows)},
+        )
+    ]
 
 
 def adjust_string(s):
