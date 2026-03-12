@@ -28,6 +28,28 @@ import constants as ct
 load_dotenv(dotenv_path=os.path.join(ct.BASE_DIR, ".env"))
 
 
+def get_secret_value(key):
+    """
+    Streamlit secrets から値を安全に取得
+    secrets.toml が未配置でも例外を出さず None を返す
+    """
+    try:
+        return st.secrets.get(key)
+    except Exception:
+        return None
+
+# Streamlit Cloudでは .env を使わず App settings (secrets) を利用する
+if not os.getenv("OPENAI_API_KEY"):
+    secret_openai_api_key = get_secret_value("OPENAI_API_KEY")
+    if secret_openai_api_key:
+        os.environ["OPENAI_API_KEY"] = secret_openai_api_key
+
+if not os.getenv("USER_AGENT"):
+    secret_user_agent = get_secret_value("USER_AGENT")
+    if secret_user_agent:
+        os.environ["USER_AGENT"] = secret_user_agent
+
+
 ############################################################
 # 関数定義
 ############################################################
@@ -123,8 +145,8 @@ def initialize_retriever():
     
     # チャンク分割用のオブジェクトを作成
     text_splitter = CharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
+        chunk_size=ct.RAG_CHUNK_SIZE,
+        chunk_overlap=ct.RAG_CHUNK_OVERLAP,
         separator="\n"
     )
 
@@ -135,7 +157,7 @@ def initialize_retriever():
     db = Chroma.from_documents(splitted_docs, embedding=embeddings)
 
     # ベクターストアを検索するRetrieverの作成
-    st.session_state.retriever = db.as_retriever(search_kwargs={"k": 3})
+    st.session_state.retriever = db.as_retriever(search_kwargs={"k": ct.RETRIEVER_TOP_K})
 
 
 def initialize_session_state():

@@ -59,6 +59,23 @@ def build_error_message(message):
     return "\n".join([message, ct.COMMON_ERROR_MESSAGE])
 
 
+def build_source_message(source, page_number=None):
+    """
+    参照元の表示テキストを作成
+
+    Args:
+        source: 参照元のありか
+        page_number: 参照ページ番号（0始まり想定）
+
+    Returns:
+        画面表示用の参照元テキスト
+    """
+    if source.lower().endswith(".pdf") and page_number is not None:
+        return f"{source}（ページNo.{page_number + 1}）"
+
+    return source
+
+
 def get_llm_response(chat_message):
     """
     LLMからの回答取得

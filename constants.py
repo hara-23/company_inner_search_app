@@ -51,6 +51,9 @@ TEMPERATURE = 0.5
 # RAG参照用のデータソース系
 # ==========================================
 RAG_TOP_FOLDER_PATH = os.path.join(BASE_DIR, "data")
+RETRIEVER_TOP_K = 5
+RAG_CHUNK_SIZE = 500
+RAG_CHUNK_OVERLAP = 50
 SUPPORTED_EXTENSIONS = {
     ".pdf": PyMuPDFLoader,
     ".docx": Docx2txtLoader,
